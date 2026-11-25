@@ -11,8 +11,21 @@ export default function Overview() {
   const d = data.分布 || {}
   return (
     <div className="panel">
-      <h2>总览</h2>
+      <h2>总览 · 总览对账</h2>
       <p className="muted">当前班次：{data.班次?.business_day} {data.班次?.name} · {data.班次?.sealed ? '已封班' : '未封班'}</p>
+      {data.争用口径 && <p className="muted">争用口径：{data.争用口径}</p>}
+      {data.对账 && (
+        <div className={data.对账.平衡 ? 'msg' : 'err'}>
+          对账{data.对账.平衡 ? '平衡' : `发现 ${data.对账.差异?.length || 0} 项差异`}
+          {typeof data.对账.未清件数 === 'number' ? ` · 未清 ${data.对账.未清件数}` : ''}
+          {typeof data.对账.回流件数 === 'number' ? ` · 回流件 ${data.对账.回流件数}` : ''}
+        </div>
+      )}
+      {data.对账?.差异?.length > 0 && (
+        <ul className="err">
+          {data.对账.差异.slice(0, 8).map((x, i) => <li key={i}>{x.说明}</li>)}
+        </ul>
+      )}
       <div className="grid">
         {Object.entries(d).map(([k, v]) => (
           <div className="stat" key={k}><div className="n">{v}</div><div className="l">{k}</div></div>

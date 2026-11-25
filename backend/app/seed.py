@@ -48,8 +48,12 @@ def seed_if_empty() -> None:
                 (dest, chute_ids[chute], "种子路由"),
             )
         conn.execute(
-            "INSERT INTO settings(key, value) VALUES (?, ?), (?, ?)",
-            ("口门软容量提示", "120", "回流自动再路由", "否"),
+            "INSERT INTO settings(key, value) VALUES (?, ?), (?, ?), (?, ?)",
+            (
+                "口门软容量提示", "120",
+                "回流自动再路由", "否",
+                "回流入袋争用口径", "提交顺序裁决：回流先提交则在途入袋整笔拒绝；入袋先提交则回流显式带出并冲正回执",
+            ),
         )
         # 预置一笔待路由扫描，方便冒烟看见分布
         conn.execute(

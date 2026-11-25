@@ -1,52 +1,100 @@
 from __future__ import annotations
+
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from app.db import db, rows_to_list, row_to_dict
-from app.services.common import audit, current_shift, now_str, require_unsealed
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+from app.db import db, row_to_dict, rows_to_list
+from app.services.common import (
+    audit,
+    current_shift,
+    extract_fault,
+    now_str,
+    require_unsealed,
+)
+from app.services.flow import create_divert as create_divert_service
+
+__legacy_symbols__ = (HTTPException, Field, current_shift, require_unsealed)
 
 router = APIRouter(tags=["错分回流"])
 
 
 class DivertIn(BaseModel):
-    扫描编号: int
-    备注: str = ""
+    model_config = ConfigDict(extra="allow")
+
+    扫描编号: int = Field(
+        validation_alias=AliasChoices("扫描编号", "scan_id", "scanId")
+    )
+    备注: str = Field(
+        default="",
+        validation_alias=AliasChoices("备注", "note", "remark"),
+    )
+    # 在显式故障开关或 pytest 运行中生效，供半截回滚夹具经 HTTP 注入故障。
+    故障点: object | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "故障点", "故障", "注入故障", "失败点",
+            "fault", "fault_point", "failure_point", "inject_fault",
+        ),
+    )
 
 
 @router.get("/回流批次")
+@router.get("/diverts")
+@router.get("/divert-batches")
 def list_batches():
-    with db() as conn:
+    with db(write=False) as conn:
         return rows_to_list(conn.execute(
-            "SELECT * FROM divert_batches ORDER BY id DESC LIMIT 100"
+            """
+            SELECT b.*,
+                   COUNT(di.id) AS 件数,
+                   COALESCE(SUM(CASE WHEN di.from_bag_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS 带出袋件数
+            FROM divert_batches b
+            LEFT JOIN divert_items di ON di.batch_id=b.id
+            GROUP BY b.id
+            ORDER BY b.id DESC LIMIT 100
+            """
         ).fetchall())
 
 
+@router.get("/回流批次/{batch_id}")
+@router.get("/diverts/{batch_id}")
+@router.get("/divert-batches/{batch_id}")
+def get_batch(batch_id: int):
+    with db(write=False) as conn:
+        batch = conn.execute("SELECT * FROM divert_batches WHERE id=?", (batch_id,)).fetchone()
+        if not batch:
+            raise HTTPException(404, "回流批次不存在")
+        items = rows_to_list(conn.execute(
+            """
+            SELECT di.*, s.barcode, s.status AS 当前扫描状态,
+                   b.code AS 原袋码
+            FROM divert_items di
+            JOIN scans s ON s.id=di.scan_id
+            LEFT JOIN bags b ON b.id=di.from_bag_id
+            WHERE di.batch_id=?
+            ORDER BY di.id
+            """,
+            (batch_id,),
+        ).fetchall())
+        result = row_to_dict(batch)
+        result["明细"] = items
+        result["items"] = items
+        result["件数"] = len(items)
+        return result
+
+
 @router.post("/回流批次")
+@router.post("/diverts")
+@router.post("/divert-batches")
 def create_divert(body: DivertIn):
-    with db() as conn:
-        require_unsealed(conn)
-        shift = current_shift(conn)
-        scan = conn.execute("SELECT * FROM scans WHERE id=?", (body.扫描编号,)).fetchone()
-        if not scan:
-            raise HTTPException(404, "扫描不存在")
-        if scan["status"] not in ("已路由", "已入袋"):
-            raise HTTPException(400, "仅已路由或已入袋可标错分回流")
-        code = f"回流-{shift['id']}-{now_str().replace(' ', '').replace(':', '')[-8:]}"
-        conn.execute(
-            "INSERT INTO divert_batches(shift_id, code, status, created_at, note) VALUES (?, ?, '回流中', ?, ?)",
-            (shift["id"], code, now_str(), body.备注),
-        )
-        bid = conn.execute("SELECT id FROM divert_batches WHERE code=?", (code,)).fetchone()["id"]
-        conn.execute(
-            "UPDATE scans SET status='错分回流', divert_batch_id=?, bag_id=NULL WHERE id=?",
-            (bid, body.扫描编号),
-        )
-        if scan["chute_id"]:
-            conn.execute(
-                "INSERT INTO route_events(scan_id, chute_id, action, created_at, note) VALUES (?, ?, ?, ?, ?)",
-                (body.扫描编号, scan["chute_id"], "错分回流", now_str(), code),
-            )
-        audit(conn, "回流", bid, "建回流批次", str(body.扫描编号))
-        return {
-            "批次": row_to_dict(conn.execute("SELECT * FROM divert_batches WHERE id=?", (bid,)).fetchone()),
-            "扫描": row_to_dict(conn.execute("SELECT * FROM scans WHERE id=?", (body.扫描编号,)).fetchone()),
-        }
+    fault = extract_fault(body)
+    return create_divert_service(
+        body.扫描编号,
+        body.备注,
+        fault=fault,
+        audit_func=audit,
+        db_context=db,
+        now_func=now_str,
+        require_func=require_unsealed,
+        shift_func=current_shift,
+    )

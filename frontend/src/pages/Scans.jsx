@@ -25,7 +25,8 @@ export default function Scans() {
   }
   return (
     <div className="panel">
-      <h2>过机扫描</h2>
+      <h2>过机扫描 · 扫描册</h2>
+      <p className="muted">装载、条码路由口门口径与扫描状态机使用同一条扫描事实记录。</p>
       <div className="row">
         <label>条码<input value={barcode} onChange={(e) => setBarcode(e.target.value)} /></label>
         <label>目的地码<input value={dest} onChange={(e) => setDest(e.target.value)} /></label>

@@ -13,14 +13,21 @@ export default function Diverts() {
   }
   useEffect(() => { load().catch((e) => setErr(e.message)) }, [])
   const create = async () => {
+    setErr('')
     try {
       await api('/回流批次', { method: 'POST', body: JSON.stringify({ 扫描编号: Number(scanId) }) })
-      load()
-    } catch (e) { setErr(e.message) }
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      // 无论成功还是争用失败，都以服务端最终状态重刷批次和可回流选项。
+      setScanId('')
+      try { await load() } catch (e) { setErr(e.message) }
+    }
   }
   return (
     <div className="panel">
-      <h2>错分回流</h2>
+      <h2>错分回流 · 回流批次</h2>
+      <p className="muted">回流先提交时并发入袋整笔拒绝；入袋先落袋时，回流批次显式带出该件并冲正入袋回执。</p>
       {err && <div className="err">{err}</div>}
       <div className="row">
         <label>扫描
@@ -32,10 +39,10 @@ export default function Diverts() {
         <button type="button" onClick={create}>建回流批次</button>
       </div>
       <table>
-        <thead><tr><th>编号</th><th>批次码</th><th>状态</th><th>时间</th></tr></thead>
+        <thead><tr><th>编号</th><th>批次码</th><th>状态</th><th>件数</th><th>带出袋件</th><th>时间</th></tr></thead>
         <tbody>
           {batches.map((b) => (
-            <tr key={b.id}><td>{b.id}</td><td>{b.code}</td><td>{b.status}</td><td>{b.created_at}</td></tr>
+            <tr key={b.id}><td>{b.id}</td><td>{b.code}</td><td>{b.status}</td><td>{b.件数 ?? '-'}</td><td>{b.带出袋件数 ?? '-'}</td><td>{b.created_at}</td></tr>
           ))}
         </tbody>
       </table>

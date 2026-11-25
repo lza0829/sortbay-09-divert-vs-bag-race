@@ -24,10 +24,17 @@ export default function Bags() {
     } catch (e) { setErr(e.message) }
   }
   const add = async () => {
+    setErr(''); setMsg('')
     try {
       await api(`/封袋/${bagId}/入袋`, { method: 'POST', body: JSON.stringify({ 扫描编号: Number(scanId) }) })
-      setMsg('入袋成功'); load()
-    } catch (e) { setErr(e.message) }
+      setMsg('入袋成功')
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      // 争用失败时也要同刷扫描册/袋件数，避免页面继续把已回流件显示为可入袋。
+      setScanId('')
+      try { await load() } catch (e) { setErr(e.message) }
+    }
   }
   const seal = async () => {
     try {
@@ -37,7 +44,8 @@ export default function Bags() {
   }
   return (
     <div className="panel">
-      <h2>封袋</h2>
+      <h2>封袋页 · 袋页</h2>
+      <p className="muted">袋件数由扫描的 bag_id 单一事实计算；回流带出时同一事务冲正入袋回执并减少袋件数。</p>
       {msg && <div className="msg">{msg}</div>}
       {err && <div className="err">{err}</div>}
       <div className="row">
@@ -60,7 +68,7 @@ export default function Bags() {
         <button type="button" className="secondary" onClick={seal}>封口</button>
       </div>
       <table>
-        <thead><tr><th>编号</th><th>袋码</th><th>口门</th><th>状态</th><th>件数</th></tr></thead>
+        <thead><tr><th>编号</th><th>袋码</th><th>口门</th><th>状态</th><th>袋件数</th></tr></thead>
         <tbody>
           {bags.map((b) => (
             <tr key={b.id}><td>{b.id}</td><td>{b.code}</td><td>{b.口门码}</td><td>{b.status}</td><td>{b.件数}</td></tr>

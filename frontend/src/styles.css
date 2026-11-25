@@ -135,3 +135,5 @@ th { background: #e4e8ee; }
 .msg { margin: 0.5rem 0; color: var(--ok); }
 .err { margin: 0.5rem 0; color: var(--danger); }
 .muted { color: #66707c; font-size: 0.86rem; }
+code { white-space: pre-wrap; word-break: break-all; }
+ul.err { padding-left: 1.25rem; }

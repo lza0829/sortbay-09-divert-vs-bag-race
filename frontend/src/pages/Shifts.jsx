@@ -19,6 +19,14 @@ export default function Shifts() {
       <h2>班次对账</h2>
       {err && <div className="err">{err}</div>}
       {rec && (
+        <div className={rec.平衡 === false ? 'err' : 'msg'}>
+          总览对账：{rec.平衡 === false ? `发现 ${rec.差异?.length || 0} 项差异` : '平衡闭合'}
+          {rec.平衡 === false && (
+            <ul>{(rec.差异 || []).slice(0, 10).map((x, i) => <li key={i}>{x.说明}</li>)}</ul>
+          )}
+        </div>
+      )}
+      {rec && (
         <div className="grid">
           <div className="stat"><div className="n">{rec.扫描总数}</div><div className="l">扫描总数</div></div>
           <div className="stat"><div className="n">{rec.已路由及以上}</div><div className="l">已路由及以上</div></div>
